@@ -22,6 +22,9 @@ void get_URL( const string& host, const string& path )
     socket.read( recv );
     cout << recv;
   }
+  if ( socket.closed() != true ) {
+    socket.shutdown( SHUT_RDWR );
+  }
   // cerr << "Function called: get_URL(" << host << ", " << path << ")\n";
   // cerr << "Warning: get_URL() has not been implemented yet.\n";
 }
