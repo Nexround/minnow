@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.24.2)
-
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(minnow CXX)
 
 if(${CMAKE_GENERATOR} STREQUAL "Unix Makefiles")
