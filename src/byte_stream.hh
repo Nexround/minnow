@@ -28,7 +28,6 @@ protected:
   bool error_ {};
 
   bool closed_ { false };
-  bool has_error_ { false };
 
   uint64_t num_bytes_pushed_ { 0 };
   uint64_t num_bytes_popped_ { 0 };

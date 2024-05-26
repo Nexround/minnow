@@ -7,7 +7,7 @@ class Reassembler
 {
 public:
   // Construct Reassembler to write into given ByteStream.
-  explicit Reassembler( ByteStream&& output ) : output_( std::move( output ) ) {}
+  explicit Reassembler( ByteStream&& output ) : output_( std::move( output ) ), _pending_map() {}
 
   /*
    * Insert a new substring to be reassembled into a ByteStream.
@@ -44,5 +44,6 @@ public:
 private:
   ByteStream output_;               // the Reassembler writes to this ByteStream
   uint64_t _next_assembled_idx = 0; // the next byte to be written to the output
-  std::map<uint64_t, std::string> myMap;
+  uint64_t eof_idx_ { 0 - 1 };      // the index of the last byte in the stream
+  std::map<uint64_t, std::string> _pending_map;
 };
