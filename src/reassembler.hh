@@ -2,7 +2,7 @@
 
 #include "byte_stream.hh"
 #include <map>
-
+#include <string>
 class Reassembler
 {
 public:
@@ -42,8 +42,13 @@ public:
   const Writer& writer() const { return output_.writer(); }
 
 private:
-  ByteStream output_;               // the Reassembler writes to this ByteStream
-  uint64_t _next_assembled_idx = 0; // the next byte to be written to the output
-  uint64_t eof_idx_ { 0 - 1 };      // the index of the last byte in the stream
+  ByteStream output_;                 // the Reassembler writes to this ByteStream
+  uint64_t _next_assembled_idx { 0 }; // the next byte to be written to the output
+  uint64_t current_end_idx { 0 };     // the end of the current substring
+  uint64_t eof_idx_ { 0 };            // the index of the last byte in the stream
+  bool has_last_ { false };     // whether the last substring has been inserted
   std::map<uint64_t, std::string> _pending_map;
+  std::pair<uint64_t, std::string> overlap_process( uint64_t first_index,
+                                                    std::string data,
+                                                    std::map<uint64_t, std::string>& _pending_map );
 };
