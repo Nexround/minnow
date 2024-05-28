@@ -2,13 +2,35 @@
 #include <iostream>
 #include <string>
 using namespace std;
+void Reassembler::update_first_unacceptable_idx()
+{
+  // 更新 first_unacceptable_idx
+  uint64_t available_capacity = output_.writer().available_capacity();
+  first_unacceptable_idx = first_unassembled_idx + available_capacity;
+}
+
 std::pair<uint64_t, std::string> Reassembler::overlap_process( uint64_t first_index,
                                                                std::string data,
                                                                std::map<uint64_t, std::string>& pending_map )
 {
   // index相同的情况？
   // 首先检查是否有重叠的部分
-  std::pair<uint64_t, std::string> candidate = std::pair( first_index, data );
+  auto end_of_this = first_index + data.size() - 1;
+  auto available_capacity = output_.writer().available_capacity();
+  auto map_size = bytes_pending();
+  auto candidate = std::pair<uint64_t, std::string>( first_index, data );
+
+  update_first_unacceptable_idx();
+  if ( first_index >= first_unacceptable_idx ) {
+    return std::pair<uint64_t, std::string>();
+  }
+
+  if ( candidate.first < first_unassembled_idx && end_of_this >= first_unassembled_idx ) {
+    // 该字符串包含_next_assembled_idx
+
+    candidate.second.erase( 0, first_unassembled_idx - candidate.first );
+    candidate.first = first_unassembled_idx;
+  }
   // 对插入前后的元素进行检查
   // 原则：若要调整长度，则调整当前字符串
 
@@ -51,6 +73,10 @@ std::pair<uint64_t, std::string> Reassembler::overlap_process( uint64_t first_in
       pending_map.erase( nextIter ); // 删除后一个元素
     }
   }
+  uint64_t i = available_capacity - map_size;
+  if ( i < candidate.second.size() ) {
+    candidate.second = candidate.second.substr( 0, i );
+  }
   pending_map.insert( candidate );
 
   return candidate;
@@ -76,14 +102,35 @@ void Reassembler::insert( uint64_t first_index, string data, bool is_last_substr
   std::pair<uint64_t, std::string> candidate = overlap_process( first_index, this_data, _pending_map );
   // 若 first_index == _next_assembled_idx，直接写入
   // uint64_t available_capacity = output_.writer().available_capacity();
-  if ( candidate.first == _next_assembled_idx && candidate.second.size() > 0 ) {
-    output_.writer().push( candidate.second );
-    _pending_map.erase( candidate.first );          // 删除该元素
-    _next_assembled_idx += candidate.second.size(); // 更新下一个要写入的位置
-    // _next_assembled_idx = current_end_idx + 1;
-  }
-  if ( ( _next_assembled_idx - 1 == eof_idx_ || _next_assembled_idx == eof_idx_ ) && has_last_ ) {
+  // if ( candidate.first == first_unassembled_idx && candidate.second.size() > 0 ) {
+  //   // 若满则不写入，放弃
+  //   if ( output_.writer().available_capacity() == 0 ) {
+  //     return;
+  //   }
+  //   output_.writer().push( candidate.second );
+  //   _pending_map.erase( candidate.first );            // 删除该元素
+  //   first_unassembled_idx += candidate.second.size(); // 更新下一个要写入的位置
+  //   // _next_assembled_idx = current_end_idx + 1;
+  // }
+  push_to_output();
+  if ( ( first_unassembled_idx - 1 == eof_idx_ || first_unassembled_idx == eof_idx_ ) && has_last_ ) {
     output_.writer().close(); //&& eof_idx_ != 0  _next_assembled_idx - 1 == eof_idx_
+  }
+}
+void Reassembler::push_to_output()
+{
+  while ( true ) {
+    auto iter = _pending_map.find( first_unassembled_idx );
+    if ( iter == _pending_map.end() ) {
+      break;
+    }
+    auto& data = iter->second;
+    if ( output_.writer().available_capacity() < data.size() ) {
+      break;
+    }
+    output_.writer().push( data );
+    first_unassembled_idx += data.size();
+    _pending_map.erase( iter );
   }
 }
 uint64_t Reassembler::bytes_pending() const
