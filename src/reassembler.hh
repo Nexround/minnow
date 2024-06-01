@@ -45,7 +45,7 @@ private:
   ByteStream output_;                    // the Reassembler writes to this ByteStream
   uint64_t first_unassembled_idx { 0 };  // the next byte to be written to the output
   uint64_t first_unacceptable_idx { 0 }; // the next byte that is beyond the output's capacity
-  uint64_t current_end_idx { 0 };        // the end of the current substring
+  uint64_t current_end_idx { 0 };        // 最后一个已经拼接的字节位置
   uint64_t eof_idx_ { 0 };               // the index of the last byte in the stream
   bool has_last_ { false };              // whether the last substring has been inserted
   std::map<uint64_t, std::string> _pending_map;
