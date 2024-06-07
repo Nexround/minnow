@@ -2,6 +2,25 @@
 #include <iostream>
 #include <string>
 using namespace std;
+int findFirstDifference( const std::string& str1, const std::string& str2 )
+{
+  uint64_t index = 0;
+  while ( index < str1.length() && index < str2.length() ) {
+    if ( str1[index] != str2[index] )
+      break; // 找到第一个不同的字符，退出循环
+    ++index;
+  }
+
+  // 检查哪个字符串更短
+  if ( index == str1.length() && index < str2.length() )
+    return index; // str1结束，str2未结束
+  else if ( index == str2.length() && index < str1.length() )
+    return index; // str2结束，str1未结束
+  else if ( index < str1.length() && index < str2.length() )
+    return index; // 两个字符串在该位置不同
+
+  return -1; // 字符串完全相同或其中一个为空
+}
 void Reassembler::update_first_unacceptable_idx()
 {
   // 更新 first_unacceptable_idx
@@ -9,9 +28,9 @@ void Reassembler::update_first_unacceptable_idx()
   first_unacceptable_idx = first_unassembled_idx + available_capacity;
 }
 
-std::pair<uint64_t, std::string> Reassembler::overlap_process( uint64_t first_index,
-                                                               std::string data,
-                                                               std::map<uint64_t, std::string>& pending_map )
+void Reassembler::overlap_process( uint64_t first_index,
+                                   std::string data,
+                                   std::map<uint64_t, std::string>& pending_map )
 {
   // index相同的情况？
   // 首先检查是否有重叠的部分
@@ -23,7 +42,7 @@ std::pair<uint64_t, std::string> Reassembler::overlap_process( uint64_t first_in
   update_first_unacceptable_idx();
   // 若该字符串的范围超出了最大范围，则直接返回
   if ( first_index >= first_unacceptable_idx ) {
-    return std::pair<uint64_t, std::string>();
+    return;
   }
   // 若该字符串部分超出了最大范围，则截取该字符串
   if ( first_index < first_unacceptable_idx && end_of_this >= first_unacceptable_idx ) {
@@ -58,22 +77,29 @@ std::pair<uint64_t, std::string> Reassembler::overlap_process( uint64_t first_in
         candidate.second.erase( 0, overlap_length ); // 删除重叠部分后的新数据
       } else if ( end_of_prev > candidate.first ) {
         // 前一个元素的范围包含了当前插入的元素
-        return std::pair<uint64_t, std::string>(); // 则直接返回
+        return; // 则直接返回
       }
     }
     // prevIter != pending_map.begin() == true说明prevIter前面还有元素
     // 现在prevIter指向的是candidate.first之前的元素，或者容器的第一个元素
     if ( prevIter->first == candidate.first ) {
-      auto end_of_prev = prevIter->first + prevIter->second.size();
-      if ( end_of_prev > candidate.first ) {
-        // 有重叠部分
-        auto overlap_length = end_of_prev - candidate.first;
-        candidate.first = end_of_prev + 1;           // 更新该字符串的头部位置
-        candidate.second.erase( 0, overlap_length ); // 删除重叠部分后的新数据
-      } else if ( end_of_prev > candidate.first ) {
-        // 前一个元素的范围包含了当前插入的元素
-        return std::pair<uint64_t, std::string>(); // 则直接返回
+      auto end_of_prev = prevIter->first + prevIter->second.size() - 1;
+      // auto end_of_candidate = candidate.first + candidate.second.size() - 1;
+      // if ( end_of_prev > candidate.first ) {
+      // 有重叠部分
+      auto diff_idx = findFirstDifference( prevIter->second, candidate.second );
+      if ( diff_idx != -1 ) {
+        candidate.first = end_of_prev + 1;     // 更新该字符串的头部位置
+        candidate.second.erase( 0, diff_idx ); // 删除重叠部分后的新数据
       }
+
+      // auto overlap_length = end_of_prev - candidate.first;
+      // candidate.first = end_of_prev + 1;           // 更新该字符串的头部位置
+      // candidate.second.erase( 0, overlap_length ); // 删除重叠部分后的新数据
+      // } else if ( end_of_prev >= end_of_candidate ) {
+      //   // 前一个元素的范围包含了当前插入的元素
+      //   return; // 则直接返回
+      // }
     }
   }
   // 检查插入位置后的元素
@@ -103,7 +129,7 @@ std::pair<uint64_t, std::string> Reassembler::overlap_process( uint64_t first_in
   }
   pending_map.insert( candidate );
 
-  return candidate;
+  // return candidate;
 }
 // 处理
 void Reassembler::insert( uint64_t first_index, string data, bool is_last_substring )
@@ -116,16 +142,17 @@ void Reassembler::insert( uint64_t first_index, string data, bool is_last_substr
     if ( this_data.size() > 0 ) {
       eof_idx_ = first_index + this_data.size() - 1;
     } else {
-      eof_idx_ = first_index;
+      eof_idx_ = first_index - 1;
     }
   }
-  if ( has_last_ && first_index > eof_idx_ && eof_idx_ != 0 ) {
+  if ( has_last_ && first_index > eof_idx_ && eof_idx_ != 0 && closed_ ) {
     // 若该子串的范围超出了最大范围，则直接返回  && eof_idx_ != 0
     return;
   }
-  std::pair<uint64_t, std::string> candidate = overlap_process( first_index, this_data, _pending_map );
+  overlap_process( first_index, this_data, _pending_map );
   push_to_output();
   if ( ( first_unassembled_idx - 1 == eof_idx_ || current_end_idx == eof_idx_ ) && has_last_ ) {
+    closed_ = true;
     output_.writer().close(); //&& eof_idx_ != 0  _next_assembled_idx - 1 == eof_idx_
   } //  || first_unassembled_idx == eof_idx_
 }

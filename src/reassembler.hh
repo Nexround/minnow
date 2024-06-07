@@ -48,8 +48,9 @@ private:
   uint64_t current_end_idx { 0 };        // 最后一个已经拼接的字节位置
   uint64_t eof_idx_ { 0 };               // the index of the last byte in the stream
   bool has_last_ { false };              // whether the last substring has been inserted
+  bool closed_ { false };              // whether the last substring has been inserted
   std::map<uint64_t, std::string> _pending_map;
-  std::pair<uint64_t, std::string> overlap_process( uint64_t first_index,
+  void overlap_process( uint64_t first_index,
                                                     std::string data,
                                                     std::map<uint64_t, std::string>& _pending_map );
   void update_first_unacceptable_idx();
