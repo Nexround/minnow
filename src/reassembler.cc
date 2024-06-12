@@ -21,6 +21,12 @@ int findFirstDifference( const std::string& str1, const std::string& str2 )
 
   return -1; // 字符串完全相同或其中一个为空
 }
+
+uint64_t end_idx( std::pair<uint64_t, std::string> t )
+{
+  return ( ( t.first + t.second.size() ) == 0 ) ? 0 : ( t.first + t.second.size() - 1 );
+}
+
 void Reassembler::update_first_unacceptable_idx()
 {
   // 更新 first_unacceptable_idx
@@ -34,11 +40,15 @@ void Reassembler::overlap_process( uint64_t first_index,
 {
   // index相同的情况？
   // 首先检查是否有重叠的部分
+  if ( data.size() == 0 ) {
+    return;
+  }
   auto end_of_this = ( ( first_index + data.size() ) == 0 ) ? 0 : ( first_index + data.size() - 1 );
   auto available_capacity = output_.writer().available_capacity();
   auto map_size = bytes_pending();
   auto candidate = std::pair<uint64_t, std::string>( first_index, data );
-
+  // auto c_idx = candidate.first;
+  // auto c_string = candidate.second;
   update_first_unacceptable_idx();
   // 若该字符串的范围超出了最大范围，则直接返回
   if ( first_index >= first_unacceptable_idx ) {
@@ -61,21 +71,29 @@ void Reassembler::overlap_process( uint64_t first_index,
 
   // 获取插入位置前后的元素
   // 首先检查该字符串是否与前方字符串重叠
-  auto prevIter = pending_map.lower_bound( candidate.first );
-  // 1：和它一样2：比他大
-  if ( pending_map.lower_bound( candidate.first ) != pending_map.end() ) {
-    // 判断是否存在不小于其的元素
-    // if ( candidate.first != pending_map.begin()->first ) { // 不是第一个元素
-    // 获取前一个元素
-    if ( prevIter != pending_map.begin() && prevIter->first != candidate.first ) {
-      prevIter--; // 只有当prevIter不是begin()时，且不与其相同，才能递减
-      auto end_of_prev = prevIter->first + prevIter->second.size();
-      if ( end_of_prev > candidate.first ) {
-        // 有重叠部分
-        auto overlap_length = end_of_prev - candidate.first;
-        candidate.first = end_of_prev + 1;           // 更新该字符串的头部位置
-        candidate.second.erase( 0, overlap_length ); // 删除重叠部分后的新数据
-      } else if ( end_of_prev > candidate.first ) {
+  auto nextIter = pending_map.upper_bound( candidate.first );
+  auto prevIter = pending_map.end();
+
+  if ( pending_map.empty() == false && nextIter != pending_map.begin() ) {
+    // 若nextIter为空，且pending_map非空，则向前取一元素，该元素一定存在
+    prevIter = std::prev( nextIter );
+  }
+  // 这里使用了std::prev函数，它返回给定迭代器的前一个迭代器，而不改变原始迭代器。
+  // 这是C++11标准引入的方法，用于在不改变原始迭代器的情况下获取前一个迭代器。
+
+  if ( prevIter != pending_map.end() && end_idx( *prevIter ) >= candidate.first ) {
+    // 若prevIter非空，并且与candidate交错
+    auto end_of_prev = end_idx( *prevIter );
+    if ( prevIter->first < candidate.first ) {
+      // prevIter = nextIter--; // 只有当prevIter不是begin()时，且不与其相同，才能递减
+
+      if ( end_of_prev >= candidate.first && end_of_prev < end_idx( candidate ) ) {
+        // 有重叠部分，但不完全
+        auto overlap_length = end_of_prev - candidate.first + 1;
+        candidate.first = end_of_prev + 1;               // 更新该字符串的头部位置
+        candidate.second.erase( 0, overlap_length );     // 删除重叠部分后的新数据
+      } 
+      else if ( end_of_prev >= end_idx( candidate ) ) { // !!!!!
         // 前一个元素的范围包含了当前插入的元素
         return; // 则直接返回
       }
@@ -83,7 +101,6 @@ void Reassembler::overlap_process( uint64_t first_index,
     // prevIter != pending_map.begin() == true说明prevIter前面还有元素
     // 现在prevIter指向的是candidate.first之前的元素，或者容器的第一个元素
     if ( prevIter->first == candidate.first ) {
-      auto end_of_prev = prevIter->first + prevIter->second.size() - 1;
       // auto end_of_candidate = candidate.first + candidate.second.size() - 1;
       // if ( end_of_prev > candidate.first ) {
       // 有重叠部分
@@ -92,40 +109,51 @@ void Reassembler::overlap_process( uint64_t first_index,
         candidate.first = end_of_prev + 1;     // 更新该字符串的头部位置
         candidate.second.erase( 0, diff_idx ); // 删除重叠部分后的新数据
       }
-
-      // auto overlap_length = end_of_prev - candidate.first;
-      // candidate.first = end_of_prev + 1;           // 更新该字符串的头部位置
-      // candidate.second.erase( 0, overlap_length ); // 删除重叠部分后的新数据
-      // } else if ( end_of_prev >= end_of_candidate ) {
-      //   // 前一个元素的范围包含了当前插入的元素
-      //   return; // 则直接返回
-      // }
     }
   }
   // 检查插入位置后的元素
-  auto nextIter = pending_map.upper_bound( candidate.first );
+  nextIter = pending_map.upper_bound( candidate.first );
   if ( nextIter != pending_map.end() ) {
     // 若nextIter非空，获取插入位置的后一个元素
     auto begin_of_next = nextIter->first;
-    auto end_of_next = nextIter->first + nextIter->second.size();
-    if ( candidate.first + candidate.second.size() > begin_of_next ) {
-      // 该字符串与后一字符串的前部有重叠部分
+    // auto end_of_next = end_idx( *nextIter );
+    auto end_of_c = end_idx( candidate );
+    // if ( end_of_c >= begin_of_next && end_of_c < end_of_next ) {
+    if ( end_of_c >= begin_of_next) {
+      // 该字符串与后一字符串的前部有重叠部分,但不完全覆盖
       // 删除该字符串的重叠部分
-      auto length = candidate.second.size();
-      auto overlap_length = candidate.first + length - begin_of_next;
-      auto sub_string = candidate.second.substr( candidate.second.size() - overlap_length, std::string::npos );
+      auto overlap_length = end_of_c - begin_of_next + 1;
+      std::string sub_string {};
+      // sub_string = candidate.second.substr( candidate.second.size() - overlap_length, std::string::npos );
+
+      try {
+        sub_string = candidate.second.substr( candidate.second.size() - overlap_length, std::string::npos );
+      } catch ( ... ) {
+        std::cerr << candidate.first << std::endl << begin_of_next << std::endl;
+        std::cerr << candidate.second.size() << std::endl << overlap_length << std::endl;
+        throw std::runtime_error( "Unknown error occurred." );
+      }
       auto sub_begin_idx = begin_of_next;
       candidate.second.erase( candidate.second.size() - overlap_length,
                               std::string::npos ); // 删除重叠部分后的新数据
       overlap_process( sub_begin_idx, sub_string, pending_map );
-    } else if ( candidate.first + candidate.second.size() > end_of_next ) {
-      // 该字符串包裹了后一个字符串
-      pending_map.erase( nextIter ); // 删除后一个元素
-    }
+    } 
+    // else if ( end_of_c >= end_of_next ) {
+    //   // 该字符串包裹了后一个字符串
+    //   pending_map.erase( nextIter ); // 删除后一个元素
+    // }
   }
   uint64_t i = available_capacity - map_size;
   if ( i < candidate.second.size() ) {
     candidate.second = candidate.second.substr( 0, i );
+
+    // try {
+    //   candidate.second = candidate.second.substr( 0, i );
+    // } catch ( ... ) {
+
+    //   std::cerr << "Unknown error occurred." << std::endl;
+    //   throw std::runtime_error( "Unknown error occurred." );
+    // }
   }
   pending_map.insert( candidate );
 
